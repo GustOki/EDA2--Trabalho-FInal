@@ -10,5 +10,5 @@ Desenvolver um sistema de análise textual focado no **Mercado Financeiro**, uti
 * Carlos Henrique de Paiva Munis
 * Davi Rodrigues Nunes
 * Felipe Lopes Pedroza
-* Gustavo Oki de Freitas Rodrigues Leite
+* Gustavo Oki de Freitas Rodrigues Leite (231034716)
 
