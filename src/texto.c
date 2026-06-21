@@ -101,6 +101,15 @@ int eh_stopword(const char *palavra) {
   return 0;
 }
 
+/* Token puramente numérico (ex: "2008", "3000", "10") não carrega
+ * significado temático para o grafo de coocorrência — é ruído. */
+static int eh_numerico(const char *palavra) {
+  if (palavra[0] == '\0') return 0;
+  for (const char *p = palavra; *p != '\0'; p++)
+    if (!isdigit((unsigned char)*p)) return 0;
+  return 1;
+}
+
 int tokenizar(const char *texto_normalizado, char tokens[][MAX_TOKEN_LEN],
               int max_tokens) {
   int n_tokens = 0;
@@ -124,7 +133,7 @@ int tokenizar(const char *texto_normalizado, char tokens[][MAX_TOKEN_LEN],
     memcpy(palavra, inicio, len);
     palavra[len] = '\0';
 
-    if (!eh_stopword(palavra)) {
+    if (!eh_stopword(palavra) && !eh_numerico(palavra)) {
       strcpy(tokens[n_tokens], palavra);
       n_tokens++;
     }

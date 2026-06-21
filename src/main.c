@@ -20,6 +20,10 @@
 #include <string.h>
 #include <math.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "grafo.h"
 #include "algoritmos_grafo.h"
 #include "csv.h"
@@ -29,16 +33,16 @@
 /* ─────────────────────────────────────────────
  * Constantes de configuração
  * ───────────────────────────────────────────── */
-#define MAX_DOCS        512
+#define MAX_DOCS        5000    /* 1 documento = 1 manchete (granularidade original) */
 #define MAX_TOKENS_DOC  256
-#define MAX_VOCAB       600
+#define MAX_VOCAB       8000
 #define MAX_TOKEN_LEN   64
-#define TOP_N_TERMOS    50      /* termos selecionados por TF-IDF            */
+#define TOP_N_TERMOS    600     /* teto de termos selecionados (válvula de segurança; filtro de DF já faz o corte principal) */
 #define LIMIAR_PADRAO   0.5     /* limiar PPMI para manter aresta            */
 #define TOP_GRAU        15      /* top-N vértices por grau a exibir          */
 #define MAX_PERIODO_LEN 8       /* "YYYY-MM\0"                               */
 #define MAX_PERIODOS    24
-#define DF_MIN_FRAC     0.02    /* ignora termos em < 2% dos docs (raros)    */
+#define DF_MIN_FRAC     0.003   /* ignora termos em < 0,3% dos docs (raros)  */
 #define DF_MAX_FRAC     0.85    /* ignora termos em > 85% dos docs (gerais)  */
 
 /* ─────────────────────────────────────────────
@@ -525,6 +529,13 @@ static void titulo_secao(int num, const char *nome) {
  * ───────────────────────────────────────────── */
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+    /* Força o console do Windows a interpretar saída como UTF-8,
+     * evitando caracteres acentuados corrompidos (mojibake). */
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+
     const char *caminho_csv = "dados/noticias.csv";
     double      limiar      = LIMIAR_PADRAO;
     int         top_n       = TOP_N_TERMOS;
