@@ -386,114 +386,6 @@ static Grafo *aplicar_limiar(const Grafo *g, double limiar) {
 }
 
 /* ─────────────────────────────────────────────
- * SCC — Kosaraju (dois DFS iterativos)
- * ───────────────────────────────────────────── */
-
-static void dfs_finalizacao(const Grafo *g, int origem,
-                             int *visitado, int *pilha, int *topo) {
-    int *exec     = malloc(sizeof(int) * g->n_vert * 2);
-    int  exec_top = 0;
-
-    exec[exec_top++] = origem;
-    exec[exec_top++] = 0;
-
-    while (exec_top > 0) {
-        int processado = exec[--exec_top];
-        int v          = exec[--exec_top];
-
-        if (processado) { pilha[(*topo)++] = v; continue; }
-        if (visitado[v]) continue;
-        visitado[v] = 1;
-
-        exec[exec_top++] = v;
-        exec[exec_top++] = 1;
-
-        for (ArestaNo *a = g->adj[v]; a; a = a->prox) {
-            if (!visitado[a->vizinho]) {
-                exec[exec_top++] = a->vizinho;
-                exec[exec_top++] = 0;
-            }
-        }
-    }
-    free(exec);
-}
-
-static void dfs_transposto(const Grafo *g, int origem,
-                            int *visitado, int *comp, int *n_comp) {
-    int *pilha = malloc(sizeof(int) * g->n_vert);
-    int  topo  = 0;
-    pilha[topo++] = origem;
-
-    while (topo > 0) {
-        int v = pilha[--topo];
-        if (visitado[v]) continue;
-        visitado[v] = 1;
-        comp[(*n_comp)++] = v;
-
-        for (int u = 0; u < g->n_vert; u++)
-            if (!visitado[u] && grafo_tem_aresta(g, u, v))
-                pilha[topo++] = u;
-    }
-    free(pilha);
-}
-
-typedef struct {
-    int **comps;
-    int  *tamanhos;
-    int   n_comps;
-} ResultadoSCC;
-
-static ResultadoSCC kosaraju(const Grafo *g) {
-    int n = g->n_vert;
-    ResultadoSCC res = {NULL, NULL, 0};
-
-    int *visitado = calloc(n, sizeof(int));
-    int *pilha    = malloc(n * sizeof(int));
-    int  topo     = 0;
-
-    for (int v = 0; v < n; v++)
-        if (!visitado[v])
-            dfs_finalizacao(g, v, visitado, pilha, &topo);
-
-    memset(visitado, 0, n * sizeof(int));
-    res.comps    = malloc(n * sizeof(int *));
-    res.tamanhos = malloc(n * sizeof(int));
-
-    for (int i = topo - 1; i >= 0; i--) {
-        int v = pilha[i];
-        if (visitado[v]) continue;
-        int *comp   = malloc(n * sizeof(int));
-        int  n_comp = 0;
-        dfs_transposto(g, v, visitado, comp, &n_comp);
-        res.comps[res.n_comps]    = comp;
-        res.tamanhos[res.n_comps] = n_comp;
-        res.n_comps++;
-    }
-
-    /* Ordenar por tamanho decrescente (selection sort) */
-    for (int i = 0; i < res.n_comps - 1; i++) {
-        int idx_max = i;
-        for (int j = i + 1; j < res.n_comps; j++)
-            if (res.tamanhos[j] > res.tamanhos[idx_max]) idx_max = j;
-        int *tc = res.comps[i];    int tt = res.tamanhos[i];
-        res.comps[i]          = res.comps[idx_max];
-        res.tamanhos[i]       = res.tamanhos[idx_max];
-        res.comps[idx_max]    = tc;
-        res.tamanhos[idx_max] = tt;
-    }
-
-    free(visitado);
-    free(pilha);
-    return res;
-}
-
-static void scc_liberar(ResultadoSCC *res) {
-    for (int i = 0; i < res->n_comps; i++) free(res->comps[i]);
-    free(res->comps);
-    free(res->tamanhos);
-}
-
-/* ─────────────────────────────────────────────
  * Análise temporal
  * ───────────────────────────────────────────── */
 
@@ -670,28 +562,56 @@ int main(int argc, char *argv[]) {
     free(dist);
 
     /* ═══════════════════════════════════════════
-     * [03] SCC — Kosaraju
+     * [03] Componentes conexas (BFS)
+     *
+     * O grafo de coocorrência é não-direcionado, então a noção relevante
+     * é a de componentes conexas (não SCC, que pressupõe arestas dirigidas).
+     * Reutiliza componentes_conexas() do módulo algoritmos_grafo.
      * ═══════════════════════════════════════════ */
-    titulo_secao(3, "SCC — COMPONENTES FORTEMENTE CONEXAS (Kosaraju)");
+    titulo_secao(3, "COMPONENTES CONEXAS (BFS)");
 
-    ResultadoSCC scc = kosaraju(g);
+    int *componente = malloc(n_termos * sizeof(int));
+    int  n_comps    = componentes_conexas(g, componente);
 
-    int singletons = 0;
-    int exibidos_scc = 0;
-    for (int i = 0; i < scc.n_comps; i++) {
-        if (scc.tamanhos[i] == 1) { singletons++; continue; }
-        printf("  SCC #%d (%d termos): ", ++exibidos_scc, scc.tamanhos[i]);
-        for (int j = 0; j < scc.tamanhos[i]; j++) {
-            if (j > 0) printf(", ");
-            printf("%s", termos[scc.comps[i][j]]);
-        }
-        printf("\n");
-        if (exibidos_scc >= 8) break;
+    /* Tamanho de cada componente */
+    int *tam_comp = calloc(n_comps, sizeof(int));
+    for (int v = 0; v < n_termos; v++) tam_comp[componente[v]]++;
+
+    /* Ordem dos componentes por tamanho decrescente (selection sort) */
+    int *ord_comp = malloc(n_comps * sizeof(int));
+    for (int i = 0; i < n_comps; i++) ord_comp[i] = i;
+    for (int i = 0; i < n_comps - 1; i++) {
+        int idx_max = i;
+        for (int j = i + 1; j < n_comps; j++)
+            if (tam_comp[ord_comp[j]] > tam_comp[ord_comp[idx_max]]) idx_max = j;
+        int tmp = ord_comp[i]; ord_comp[i] = ord_comp[idx_max]; ord_comp[idx_max] = tmp;
     }
-    if (exibidos_scc == 0)
+
+    int singletons   = 0;
+    int exibidos_comp = 0;
+    for (int i = 0; i < n_comps; i++) {
+        int c = ord_comp[i];
+        if (tam_comp[c] == 1) { singletons++; continue; }
+        if (exibidos_comp < 8) {
+            printf("  Componente #%d (%d termos): ", exibidos_comp + 1, tam_comp[c]);
+            int primeiro = 1;
+            for (int v = 0; v < n_termos; v++) {
+                if (componente[v] != c) continue;
+                if (!primeiro) printf(", ");
+                printf("%s", termos[v]);
+                primeiro = 0;
+            }
+            printf("\n");
+        }
+        exibidos_comp++;
+    }
+    if (exibidos_comp == 0)
         printf("  Nenhum componente com 2+ termos encontrado.\n");
-    printf("\n  Total SCCs: %d  |  Isolados: %d\n", scc.n_comps, singletons);
-    scc_liberar(&scc);
+    printf("\n  Total de componentes: %d  |  Isolados: %d\n", n_comps, singletons);
+
+    free(componente);
+    free(tam_comp);
+    free(ord_comp);
 
     /* ═══════════════════════════════════════════
      * [04] MST — Prim máximo (sem heap)
